@@ -30,9 +30,22 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .card input{width:100%;padding:12px 16px;background:var(--in);color:var(--text);border:1px solid transparent;border-radius:12px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
 .card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,124,255,.18)}
 .err{min-height:18px;font-size:13px;color:#e5484d;text-align:center}
-.btn{padding:12px;border-radius:12px;background:var(--grad);color:#fff;font-weight:600;transition:transform .15s,filter .2s}
+.btn{padding:12px;border-radius:12px;background:var(--grad);color:#fff;font-weight:600;transition:transform .15s,filter .2s,opacity .2s}
 .btn:hover{filter:brightness(1.08)}
 .btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.7;cursor:progress;filter:none;transform:none}
+.pw{position:relative}
+.pw input{padding-right:48px}
+.eye{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;font-size:16px;opacity:.7}
+.eye:hover{background:var(--line);opacity:1}
+
+#ownRow{display:none}
+#ownRow.on{display:block;animation:rise .3s}
+.del{width:26px;height:26px;border-radius:50%;font-size:13px;opacity:0;flex-shrink:0;align-self:center;transition:opacity .15s,background .2s}
+.row:hover .del,.del:focus-visible{opacity:.8}
+.del:hover{background:var(--in);opacity:1}
+@media(hover:none){.del{opacity:.45}}
+.recv.owner .msg{box-shadow:inset 0 0 0 1.5px #f5a524}
 
 /* App */
 #app{display:none;height:100dvh;grid-template-columns:310px 1fr;background:var(--panel)}
@@ -116,10 +129,14 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   <div class="card" id="card">
     <div class="logo">🔒</div>
     <h1>Secret Messenger</h1>
-    <p>Nhập tên và Secret Key để vào phòng chat bảo mật</p>
-    <input type="text" id="name" placeholder="Tên hiển thị của bạn" maxlength="24" autocomplete="off">
-    <input type="password" id="key" placeholder="Secret Key (mã giải mã)" autocomplete="off">
-    <div class="err" id="err"></div>
+    <p>Nhập tên và mật khẩu để vào phòng chat bảo mật</p>
+    <input type="text" id="name" placeholder="Tên hiển thị của bạn" maxlength="24" autocomplete="username" spellcheck="false">
+    <div class="pw">
+      <input type="password" id="key" placeholder="Mật khẩu" autocomplete="current-password">
+      <button type="button" class="eye" id="eye" aria-label="Hiện mật khẩu">👁</button>
+    </div>
+    <div id="ownRow"><input type="password" id="okey" placeholder="👑 Mật khẩu Owner" autocomplete="off"></div>
+    <div class="err" id="err" role="alert"></div>
     <button class="btn" id="loginBtn">Vào phòng chat</button>
   </div>
 </div>
@@ -140,6 +157,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
         <div class="sub"><span class="dot" id="dot"></span><span id="online">Đang kết nối…</span></div>
       </div>
       <span class="me" id="me"></span>
+      <button class="ghost" id="clear" hidden>🗑 Xóa chat</button>
       <button class="ghost" id="exit">Thoát</button>
     </div>
     <div class="body" id="body"><div class="empty">Đang kết nối…</div></div>
@@ -148,7 +166,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
     <div class="foot">
       <div class="emojis" id="emojis"></div>
       <button class="ibtn" id="emojiBtn" aria-label="Chọn emoji">😊</button>
-      <input type="text" id="msg" placeholder="Aa Nhập tin nhắn..." autocomplete="off">
+      <input type="text" id="msg" placeholder="Aa Nhập tin nhắn..." autocomplete="off" maxlength="1500">
       <button class="ibtn" id="send" aria-label="Gửi"></button>
     </div>
   </section>
@@ -179,18 +197,22 @@ themeBtn.onclick = () => {
 };
 
 /* ---- State ---- */
-let myName = '', secretKey = '', channel = null, loading = true, lastTyping = 0;
+const OWNER_NAME = 'Owner'; // phải trùng owner_name trong owner_setup.sql
+let myName = '', secretKey = '', channel = null, loading = true, lastTyping = 0, newest = 0, session = 0, ownerKey = '', isOwner = false, unread = 0;
 const seen = new Set(), pending = new Map(), typers = new Map(), queue = [];
 let last = { sender: null, row: null, date: null };
-const body = $('body'), input = $('msg'), sendBtn = $('send'), pill = $('pill');
+const body = $('body'), input = $('msg'), sendBtn = $('send'), pill = $('pill'), picker = $('emojis');
+const nameIn = $('name'), keyIn = $('key'), loginBtn = $('loginBtn'), eye = $('eye');
 
 /* ---- Helpers ---- */
+const isOwnerName = n => n.trim().toLowerCase() === OWNER_NAME.toLowerCase();
 const hue = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const fmtTime = d => d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 const label = d => d.toDateString() === new Date().toDateString() ? fmtTime(d) : d.toLocaleDateString('vi-VN') + ' ' + fmtTime(d);
 const decrypt = c => { try { return CryptoJS.AES.decrypt(c, secretKey).toString(CryptoJS.enc.Utf8) || null; } catch (e) { return null; } };
 const nearBottom = () => body.scrollHeight - body.scrollTop - body.clientHeight < 140;
 const toBottom = () => { body.scrollTo({ top: body.scrollHeight, behavior: loading ? 'auto' : 'smooth' }); pill.classList.remove('on'); };
+const bump = m => { const t = Date.parse(m.created_at); if (t > newest) newest = t; };
 const SEND_SVG = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5v-6.8l11-1.7-11-1.7V3.5L22 12z"/></svg>';
 const updateIcon = () => { sendBtn.innerHTML = input.value.trim() ? SEND_SVG : '👍'; };
 updateIcon();
@@ -199,6 +221,7 @@ updateIcon();
 function addMessage(m, isPending) {
   const sender = String(m.sender || '?');
   const mine = sender === myName;
+  const owner = m.is_owner === true;
   const d = new Date(m.created_at || Date.now());
   const stick = mine || nearBottom() || loading;
 
@@ -212,20 +235,21 @@ function addMessage(m, isPending) {
   const cont = last.sender === sender;
   if (cont) last.row.classList.add('has-next');
 
-  const row = el('div', 'row ' + (mine ? 'sent' : 'recv') + (cont ? ' cont' : '') + (loading ? '' : ' in') + (isPending ? ' pending' : ''));
+  const row = el('div', 'row ' + (mine ? 'sent' : 'recv') + (cont ? ' cont' : '') + (owner ? ' owner' : '') + (loading ? '' : ' in') + (isPending ? ' pending' : ''));
   if (m.id) row.dataset.id = m.id;
   if (!mine) {
     const av = el('div', 'av' + (cont ? ' sp' : ''), sender[0].toUpperCase());
-    av.style.background = `hsl(${hue(sender)} 60% 50%)`;
+    av.style.background = owner ? 'linear-gradient(135deg,#f5a524,#ff6b35)' : `hsl(${hue(sender)} 60% 50%)`;
     row.appendChild(av);
   }
   const col = el('div', 'col');
-  if (!mine && !cont) col.appendChild(el('div', 'name', sender));
+  if (!mine && !cont) col.appendChild(el('div', 'name', sender + (owner ? ' 👑' : '')));
   const text = decrypt(m.content);
-  const bub = el('div', 'msg' + (text == null ? ' locked' : ''), text == null ? '🔒 Không giải mã được — kiểm tra lại Secret Key' : text);
+  const bub = el('div', 'msg' + (text == null ? ' locked' : ''), text == null ? '🔒 Không giải mã được — tin này dùng mật khẩu khác' : text);
   bub.title = fmtTime(d);
   col.appendChild(bub);
   row.appendChild(col);
+  if (isOwner) { const x = el('button', 'del', '🗑'); x.type = 'button'; x.title = 'Xóa tin nhắn'; x.onclick = () => delMsg(row); row.appendChild(x); }
   body.appendChild(row);
   last = { sender, row, date: d };
 
@@ -241,39 +265,75 @@ function renderTyping() {
 }
 
 function renderPresence() {
-  $('online').textContent = Object.keys(channel.presenceState()).length + ' đang online';
+  if (channel) $('online').textContent = Object.keys(channel.presenceState()).length + ' đang online';
 }
 
 /* ---- Realtime + history ---- */
 function adopt(row, m) {
   if (row.dataset.id) return;
-  row.dataset.id = m.id; seen.add(m.id); pending.delete(m.content);
+  row.dataset.id = m.id; seen.add(m.id); pending.delete(m.content); bump(m);
   row.classList.remove('pending');
 }
 
 function incoming(m) {
   if (seen.has(m.id)) return;
+  bump(m);
   const p = pending.get(m.content);
   if (p) { adopt(p, m); return; }
   seen.add(m.id);
   addMessage(m);
+  if (document.hidden && m.sender !== myName) document.title = '(' + (++unread) + ') Secret Messenger';
 }
 
-async function loadHistory() {
-  const { data, error } = await db.from('messages').select('*').order('created_at', { ascending: false }).limit(200);
+/* ---- Owner ---- */
+function showEmpty() {
   body.innerHTML = '';
-  if (error) body.appendChild(el('div', 'empty', 'Không tải được tin nhắn: ' + error.message));
-  else if (!data.length) body.appendChild(el('div', 'empty', 'Chưa có tin nhắn nào. Gửi lời chào đầu tiên 👋'));
-  else data.reverse().forEach(m => { seen.add(m.id); addMessage(m); });
+  body.appendChild(el('div', 'empty', 'Chưa có tin nhắn nào. Gửi lời chào đầu tiên 👋'));
+  last = { sender: null, row: null, date: null };
+}
+
+function removeRow(id) {
+  const r = [...body.querySelectorAll('.row')].find(x => x.dataset.id === String(id));
+  if (r) r.remove();
+  if (!body.querySelector('.row') && !body.querySelector('.empty')) showEmpty();
+}
+
+async function delMsg(row) {
+  const id = row.dataset.id;
+  if (!id || !confirm('Xóa tin nhắn này với mọi người?')) return;
+  const { error } = await db.rpc('owner_delete_message', { p_secret: ownerKey, p_id: id });
+  if (error) alert('Không xóa được: ' + error.message); else removeRow(id);
+}
+
+async function loadHistory(sid) {
+  const { data, error } = await db.from('messages').select('*').order('created_at', { ascending: false }).limit(200);
+  if (sid !== session || !loading) return;
+  if (error) return reset('Không tải được tin nhắn: ' + error.message);
+  // Phòng đã có tin mà không giải mã được tin nào => sai mật khẩu. Phòng trống => người đầu tiên đặt mật khẩu.
+  if (data.length && !data.some(m => decrypt(m.content) != null)) return reset('Sai mật khẩu. Kiểm tra lại rồi thử lại nhé.');
+  $('login').classList.add('hide');
+  $('app').classList.add('on');
+  body.innerHTML = '';
+  if (!data.length) body.appendChild(el('div', 'empty', 'Chưa có tin nhắn nào. Gửi lời chào đầu tiên 👋'));
+  else data.reverse().forEach(m => { seen.add(m.id); bump(m); addMessage(m); });
   toBottom();
   loading = false;
+  input.focus();
   queue.splice(0).forEach(incoming);
 }
 
-function connect() {
+// Sau khi mất mạng rồi nối lại: lấy bù những tin đã lỡ
+async function catchUp() {
+  if (!newest) return;
+  const { data } = await db.from('messages').select('*').gt('created_at', new Date(newest - 2000).toISOString()).order('created_at');
+  if (data && !loading) data.forEach(incoming);
+}
+
+function connect(sid) {
   channel = db.channel('secret-room', { config: { presence: { key: myName }, broadcast: { self: false } } });
   channel
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, p => { loading ? queue.push(p.new) : incoming(p.new); })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, p => { if (p.old) removeRow(p.old.id); })
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const n = payload && payload.name;
       if (!n || n === myName) return;
@@ -283,12 +343,14 @@ function connect() {
     })
     .on('presence', { event: 'sync' }, renderPresence)
     .subscribe(async status => {
+      if (sid !== session) return;
       const dot = $('dot');
       if (status === 'SUBSCRIBED') {
         dot.className = 'dot ok';
         await channel.track({ name: myName });
-        if (loading) loadHistory();
+        if (loading) loadHistory(sid); else catchUp();
       } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+        if (loading) return reset('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.');
         dot.className = 'dot off';
         $('online').textContent = 'Mất kết nối';
       }
@@ -300,9 +362,11 @@ async function send(text) {
   text = text.trim();
   if (!text) return;
   const content = CryptoJS.AES.encrypt(text, secretKey).toString();
-  const row = addMessage({ sender: myName, content, created_at: new Date().toISOString() }, true);
+  const row = addMessage({ sender: myName, content, created_at: new Date().toISOString(), is_owner: isOwner }, true);
   pending.set(content, row);
-  const { data, error } = await db.from('messages').insert([{ sender: myName, content }]).select().single();
+  const { data, error } = isOwner
+    ? await db.rpc('owner_send', { p_secret: ownerKey, p_content: content })
+    : await db.from('messages').insert([{ sender: myName, content }]).select().single();
   if (error) { pending.delete(content); fail(row, text); return; }
   adopt(row, data);
 }
@@ -334,7 +398,6 @@ body.addEventListener('scroll', () => { if (nearBottom()) pill.classList.remove(
 pill.onclick = toBottom;
 
 /* ---- Emoji ---- */
-const picker = $('emojis');
 '😀 😂 🥹 😍 😘 😎 🤔 😅 😭 😡 👍 👎 👏 🙏 💪 🔥 ✨ 🎉 ❤️ 💔 😴 🤝 👀 💯 🥳 😇 🙈 😱 🤣 🫶'.split(' ').forEach(e => {
   const b = el('button', null, e);
   b.type = 'button';
@@ -345,28 +408,88 @@ $('emojiBtn').onclick = ev => { ev.stopPropagation(); picker.classList.toggle('o
 document.addEventListener('click', ev => { if (!picker.contains(ev.target)) picker.classList.remove('on'); });
 
 /* ---- Login ---- */
-$('name').value = store.get('sm-name') || '';
+nameIn.value = store.get('sm-name') || '';
+const syncOwnRow = () => $('ownRow').classList.toggle('on', isOwnerName(nameIn.value));
+nameIn.addEventListener('input', syncOwnRow);
+syncOwnRow();
+(nameIn.value ? keyIn : nameIn).focus();
 
-function login() {
-  const name = $('name').value.trim(), key = $('key').value.trim();
-  if (!name || !key) {
-    const c = $('card');
-    $('err').textContent = 'Nhập tên hiển thị và Secret Key để vào phòng.';
-    c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
-    return;
-  }
-  myName = name; secretKey = key;
-  store.set('sm-name', name);
-  $('me').textContent = name;
-  $('login').classList.add('hide');
-  $('app').classList.add('on');
-  connect();
-  input.focus();
+function showErr(msg) {
+  $('err').textContent = msg || '';
+  if (!msg) return;
+  const c = $('card');
+  c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
 }
 
-$('loginBtn').onclick = login;
-['name', 'key'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) login(); }));
-$('exit').onclick = () => location.reload();
+function setBusy(on) {
+  loginBtn.disabled = on;
+  loginBtn.textContent = on ? 'Đang kiểm tra…' : 'Vào phòng chat';
+}
+
+function showPw(show) {
+  keyIn.type = $('okey').type = show ? 'text' : 'password';
+  eye.textContent = show ? '🙈' : '👁';
+  eye.setAttribute('aria-label', show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+}
+
+// Quay về màn đăng nhập và dọn sạch trạng thái (dùng cho Thoát, sai mật khẩu, lỗi kết nối)
+function reset(msg) {
+  session++;
+  if (channel) { db.removeChannel(channel); channel = null; }
+  typers.forEach(t => clearTimeout(t));
+  typers.clear(); seen.clear(); pending.clear(); queue.length = 0;
+  last = { sender: null, row: null, date: null };
+  loading = true; secretKey = ''; newest = 0; isOwner = false; ownerKey = '';
+  body.innerHTML = ''; input.value = ''; updateIcon();
+  pill.classList.remove('on'); picker.classList.remove('on'); renderTyping();
+  $('dot').className = 'dot'; $('online').textContent = 'Đang kết nối…';
+  $('app').classList.remove('on'); $('login').classList.remove('hide');
+  keyIn.value = ''; $('okey').value = ''; showPw(false); setBusy(false); showErr(msg);
+  $('clear').hidden = true; document.title = 'Secret Messenger';
+  (nameIn.value ? keyIn : nameIn).focus();
+}
+
+async function login() {
+  if (loginBtn.disabled) return;
+  const name = nameIn.value.trim(), key = keyIn.value.trim(), okey = $('okey').value.trim();
+  const owner = isOwnerName(name);
+  if (!name || !key || (owner && !okey)) {
+    showErr(!name || !key ? 'Nhập tên và mật khẩu để vào phòng.' : 'Nhập mật khẩu Owner.');
+    (!name ? nameIn : !key ? keyIn : $('okey')).focus();
+    return;
+  }
+  showErr(''); setBusy(true);
+  if (owner) {
+    const { data, error } = await db.rpc('owner_verify', { p_secret: okey });
+    if (error || data !== true) {
+      setBusy(false);
+      showErr(!error ? 'Mật khẩu Owner không đúng.' : error.code === 'PGRST202' ? 'Chưa chạy owner_setup.sql trên Supabase.' : 'Không kết nối được máy chủ.');
+      return;
+    }
+  }
+  isOwner = owner; ownerKey = owner ? okey : '';
+  myName = owner ? OWNER_NAME : name; secretKey = key;
+  store.set('sm-name', name);
+  $('me').textContent = (owner ? '👑 ' : '') + myName;
+  $('clear').hidden = !owner;
+  connect(++session);
+}
+
+loginBtn.onclick = login;
+nameIn.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  if (nameIn.value.trim() && !keyIn.value) keyIn.focus(); else login();
+});
+keyIn.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) login(); });
+eye.onclick = () => { showPw(keyIn.type === 'password'); keyIn.focus(); };
+$('exit').onclick = () => reset();
+$('okey').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) login(); });
+$('clear').onclick = async () => {
+  if (!confirm('Xóa TOÀN BỘ tin nhắn trong phòng? Không thể hoàn tác.')) return;
+  const { error } = await db.rpc('owner_clear_messages', { p_secret: ownerKey });
+  if (error) alert('Không xóa được: ' + error.message); else showEmpty();
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { unread = 0; document.title = 'Secret Messenger'; } });
 </script>
 </body>
 </html>
