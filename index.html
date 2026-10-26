@@ -1,425 +1,372 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secret Messenger - Secure E2EE</title>
-    
-    <!-- Thư viện Supabase JS & CryptoJS -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secret Messenger</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<style>
+:root{--bg:#eef1f6;--panel:#fff;--line:#e6e9ef;--text:#0f1419;--muted:#6b7385;--in:#eef0f5;--accent:#0a7cff;--grad:linear-gradient(135deg,#0a7cff 0%,#6a5cff 100%);--shadow:0 10px 40px rgba(20,30,60,.12);color-scheme:light}
+[data-theme=dark]{--bg:#0b0e13;--panel:#151922;--line:#252b37;--text:#e8ecf3;--muted:#8a93a6;--in:#232936;--shadow:0 10px 40px rgba(0,0,0,.5);color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            background-color: #f0f2f5;
-            color: #050505;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            height: 100vh;
-            overflow: hidden;
-        }
+/* Theme toggle */
+#theme{position:fixed;top:12px;right:12px;z-index:60;width:38px;height:38px;border-radius:50%;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);font-size:16px}
 
-        /* --- MÀN HÌNH ĐĂNG NHẬP (LOGIN MODAL) --- */
-        #login-modal {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(255, 255, 255, 0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 999;
-        }
-        .login-card {
-            background: #fff;
-            padding: 30px;
-            border-radius: 16px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-            width: 100%;
-            max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            text-align: center;
-        }
-        .login-card h2 {
-            font-size: 22px;
-            font-weight: 700;
-            color: #050505;
-        }
-        .login-card p {
-            font-size: 13px;
-            color: #65676b;
-            margin-bottom: 8px;
-        }
-        .login-card input {
-            width: 100%;
-            padding: 12px 16px;
-            background: #f0f2f5;
-            border: 1px solid #ccd0d5;
-            border-radius: 8px;
-            font-size: 14px;
-            outline: none;
-        }
-        .login-card input:focus {
-            border-color: #0084ff;
-        }
-        .login-card button {
-            width: 100%;
-            padding: 12px;
-            background: #0084ff;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 15px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .login-card button:hover {
-            background: #166fe5;
-        }
+/* Login */
+#login{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;transition:opacity .35s,visibility .35s;
+  background:radial-gradient(900px 500px at 15% 10%,rgba(10,124,255,.25),transparent 60%),radial-gradient(800px 500px at 90% 90%,rgba(122,77,255,.22),transparent 60%),var(--bg)}
+#login.hide{opacity:0;visibility:hidden}
+.card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:30px 26px;display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.2,.8,.2,1)}
+.card.shake{animation:shake .35s}
+.logo{width:58px;height:58px;border-radius:18px;background:var(--grad);display:grid;place-items:center;font-size:26px;margin:0 auto 2px;box-shadow:0 8px 20px rgba(10,124,255,.35)}
+.card h1{font-size:22px;text-align:center}
+.card p{font-size:13px;color:var(--muted);text-align:center;margin-top:-6px}
+.card input{width:100%;padding:12px 16px;background:var(--in);color:var(--text);border:1px solid transparent;border-radius:12px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,124,255,.18)}
+.err{min-height:18px;font-size:13px;color:#e5484d;text-align:center}
+.btn{padding:12px;border-radius:12px;background:var(--grad);color:#fff;font-weight:600;transition:transform .15s,filter .2s}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:scale(.98)}
 
-        /* --- GIAO DIỆN CHAT CHÍNH (ẨN KHI CHƯA LOGIN) --- */
-        .messenger-container {
-            display: none; /* Hiện sau khi đăng nhập */
-            width: 100vw;
-            height: 100vh;
-            background: #fff;
-        }
+/* App */
+#app{display:none;height:100dvh;grid-template-columns:310px 1fr;background:var(--panel)}
+#app.on{display:grid;animation:fade .4s}
+.side{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.side h2{padding:20px 18px 12px;font-size:24px}
+.room{margin:4px 10px;padding:10px 12px;border-radius:12px;display:flex;gap:12px;align-items:center;background:rgba(10,124,255,.1)}
+.room b{display:block;font-size:15px}
+.room small{color:var(--muted);font-size:13px}
+.av{width:30px;height:30px;border-radius:50%;color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex-shrink:0}
+.av.sp{visibility:hidden}
+.av.big{width:44px;height:44px;font-size:19px;background:var(--grad)}
+.main{display:flex;flex-direction:column;min-width:0;position:relative}
+.head{display:flex;align-items:center;gap:12px;padding:12px 64px 12px 16px;border-bottom:1px solid var(--line)}
+.head .info{flex:1;min-width:0}
+.head b{display:block}
+.sub{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:#f5a524;transition:background .3s}
+.dot.ok{background:#2ecc71}
+.dot.off{background:#e5484d}
+.me{font-size:12px;font-weight:600;background:var(--in);padding:4px 10px;border-radius:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ghost{font-size:13px;color:var(--muted);padding:4px 8px;border-radius:8px}
+.ghost:hover{background:var(--in)}
 
-        /* Cột trái */
-        .sidebar {
-            width: 320px;
-            border-right: 1px solid #e4e6eb;
-            display: flex;
-            flex-direction: column;
-            background: #fff;
-        }
-        .sidebar-header {
-            padding: 20px 16px;
-            border-bottom: 1px solid #e4e6eb;
-        }
-        .sidebar-header h2 {
-            font-size: 22px;
-            font-weight: 700;
-        }
-        .chat-list {
-            flex: 1;
-            padding: 8px;
-        }
-        .chat-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            background: #e6f2ff;
-        }
-        .avatar {
-            width: 44px;
-            height: 44px;
-            background: #0084ff;
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 16px;
-            flex-shrink: 0;
-        }
-        .chat-name {
-            font-weight: 600;
-            font-size: 15px;
-            color: #050505;
-        }
-        .chat-preview {
-            font-size: 13px;
-            color: #65676b;
-        }
+/* Messages */
+.body{flex:1;overflow-y:auto;padding:12px 16px 8px;display:flex;flex-direction:column}
+.empty{margin:auto;text-align:center;color:var(--muted);font-size:14px}
+.divider{align-self:center;font-size:12px;color:var(--muted);margin:14px 0 4px}
+.row{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
+.row.cont{margin-top:2px}
+.row.sent{flex-direction:row-reverse}
+.row.in{animation:pop .28s cubic-bezier(.2,.9,.3,1.2)}
+.row.sent.in{transform-origin:100% 100%}
+.row.recv.in{transform-origin:0 100%}
+.col{display:flex;flex-direction:column;max-width:min(68%,520px);min-width:0}
+.sent .col{align-items:flex-end}
+.name{font-size:12px;color:var(--muted);margin:0 0 3px 12px}
+.msg{padding:8px 13px;border-radius:20px;background:var(--in);white-space:pre-wrap;overflow-wrap:anywhere;transition:opacity .25s}
+.sent .msg{background:var(--grad);color:#fff}
+.recv.cont .msg{border-top-left-radius:6px}
+.recv.has-next .msg{border-bottom-left-radius:6px}
+.sent.cont .msg{border-top-right-radius:6px}
+.sent.has-next .msg{border-bottom-right-radius:6px}
+.pending .msg{opacity:.55}
+.msg.locked{font-style:italic;opacity:.8}
+.meta{font-size:11px;margin:3px 4px 0;color:#e5484d;cursor:pointer}
 
-        /* Cột phải */
-        .chat-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: #fff;
-        }
-        .chat-main-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid #e4e6eb;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .user-profile {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .user-profile .avatar {
-            width: 38px;
-            height: 38px;
-            font-size: 14px;
-        }
-        .current-user-tag {
-            font-size: 12px;
-            background: #e4e6eb;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-weight: 600;
-            color: #333;
-        }
+.typing{height:22px;padding:0 18px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .2s}
+.typing.on{opacity:1}
+.dots i{display:inline-block;width:5px;height:5px;margin-right:2px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+.dots i:nth-child(2){animation-delay:.15s}
+.dots i:nth-child(3){animation-delay:.3s}
+.pill{position:absolute;left:50%;bottom:84px;transform:translate(-50%,10px);padding:7px 14px;border-radius:999px;background:var(--grad);color:#fff;font-size:13px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.pill.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 
-        /* Khung tin nhắn */
-        .chat-body {
-            flex: 1;
-            padding: 16px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            background: #ffffff;
-        }
-        .msg {
-            max-width: 65%;
-            padding: 10px 14px;
-            border-radius: 18px;
-            font-size: 14px;
-            line-height: 1.4;
-            word-break: break-word;
-        }
-        .msg.received {
-            background: #f0f2f5;
-            color: #050505;
-            align-self: flex-start;
-        }
-        .msg.sent {
-            background: #0084ff;
-            color: #fff;
-            align-self: flex-end;
-        }
-        .msg .sender {
-            font-size: 11px;
-            font-weight: bold;
-            margin-bottom: 2px;
-            display: block;
-            opacity: 0.8;
-        }
+/* Footer */
+.foot{display:flex;align-items:center;gap:6px;padding:6px 14px 14px;position:relative}
+.foot input{flex:1;min-width:0;padding:11px 16px;border-radius:22px;border:0;background:var(--in);color:var(--text);font:inherit;outline:none;transition:box-shadow .2s}
+.foot input:focus{box-shadow:0 0 0 2px rgba(10,124,255,.35)}
+.ibtn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--accent);font-size:20px;flex-shrink:0;transition:background .2s,transform .15s}
+.ibtn:hover{background:var(--in)}
+.ibtn:active{transform:scale(.9)}
+.emojis{position:absolute;left:14px;bottom:62px;width:256px;padding:8px;display:none;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.emojis.on{display:grid;animation:pop .18s}
+.emojis button{font-size:22px;padding:5px;border-radius:8px}
+.emojis button:hover{background:var(--in)}
 
-        /* Ô nhập tin nhắn */
-        .chat-footer {
-            padding: 12px 16px;
-            background: #fff;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border-top: 1px solid #e4e6eb;
-        }
-        .chat-footer input {
-            flex: 1;
-            padding: 10px 16px;
-            background: #f0f2f5;
-            border: none;
-            border-radius: 20px;
-            font-size: 14px;
-            outline: none;
-        }
-        .send-btn {
-            background: none;
-            border: none;
-            color: #0084ff;
-            font-weight: bold;
-            font-size: 15px;
-            cursor: pointer;
-            padding: 6px 10px;
-        }
-        .send-btn:hover {
-            opacity: 0.7;
-        }
-    </style>
+@keyframes rise{from{opacity:0;transform:translateY(14px) scale(.98)}}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{opacity:0;transform:scale(.85) translateY(6px)}}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+@media(max-width:760px){#app{grid-template-columns:1fr}.side{display:none}.col{max-width:80%}.me{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
 </head>
 <body>
+<button id="theme" aria-label="Đổi giao diện sáng/tối"></button>
 
-    <!-- MÀN HÌNH ĐĂNG NHẬP -->
-    <div id="login-modal">
-        <div class="login-card">
-            <h2>🔒 Secret Messenger</h2>
-            <p>Nhập tên tài khoản và mã khóa để tham gia phòng chat bảo mật</p>
-            <input type="text" id="usernameInput" placeholder="Tên hiển thị của bạn (Ví dụ: Hungdz)...">
-            <input type="password" id="modalKeyInput" placeholder="Secret Key (Mã giải mã)..." value="Secret123">
-            <button id="loginBtn">Vào phòng chat</button>
-        </div>
+<div id="login">
+  <div class="card" id="card">
+    <div class="logo">🔒</div>
+    <h1>Secret Messenger</h1>
+    <p>Nhập tên và Secret Key để vào phòng chat bảo mật</p>
+    <input type="text" id="name" placeholder="Tên hiển thị của bạn" maxlength="24" autocomplete="off">
+    <input type="password" id="key" placeholder="Secret Key (mã giải mã)" autocomplete="off">
+    <div class="err" id="err"></div>
+    <button class="btn" id="loginBtn">Vào phòng chat</button>
+  </div>
+</div>
+
+<div id="app">
+  <aside class="side">
+    <h2>Đoạn chat</h2>
+    <div class="room">
+      <div class="av big">🔒</div>
+      <div><b>Phòng Bí Mật Chung</b><small>Bảo mật đầu cuối</small></div>
     </div>
-
-    <!-- GIAO DIỆN CHAT CHÍNH -->
-    <div class="messenger-container" id="messengerApp">
-        <!-- Cột trái: Gọn gàng -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h2>Đoạn chat</h2>
-            </div>
-            <div class="chat-list">
-                <div class="chat-item">
-                    <div class="avatar">🔒</div>
-                    <div>
-                        <div class="chat-name">Phòng Bí Mật Chung</div>
-                        <div class="chat-preview">E2EE Active</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Cột phải -->
-        <div class="chat-main">
-            <div class="chat-main-header">
-                <div class="user-profile">
-                    <div class="avatar">🔒</div>
-                    <div>
-                        <div class="chat-name">Phòng Bí Mật Chung</div>
-                        <div style="font-size: 12px; color: #65676b;">Bảo mật đầu cuối (AES)</div>
-                    </div>
-                </div>
-                <div class="current-user-tag" id="userTag">Tài khoản: Khách</div>
-            </div>
-
-            <!-- Khung chứa tin nhắn -->
-            <div class="chat-body">
-                <div class="msg received">
-                    <span class="sender">System</span>
-                    Đang kết nối hệ thống...
-                </div>
-            </div>
-
-            <!-- Ô nhập tin nhắn -->
-            <div class="chat-footer">
-                <input type="text" id="messageInput" placeholder="Aa Nhập tin nhắn...">
-                <button class="send-btn" id="sendButton">Gửi</button>
-            </div>
-        </div>
+  </aside>
+  <section class="main">
+    <div class="head">
+      <div class="av big">🔒</div>
+      <div class="info">
+        <b>Phòng Bí Mật Chung</b>
+        <div class="sub"><span class="dot" id="dot"></span><span id="online">Đang kết nối…</span></div>
+      </div>
+      <span class="me" id="me"></span>
+      <button class="ghost" id="exit">Thoát</button>
     </div>
+    <div class="body" id="body"><div class="empty">Đang kết nối…</div></div>
+    <button class="pill" id="pill">Tin nhắn mới ↓</button>
+    <div class="typing" id="typing"><span class="dots"><i></i><i></i><i></i></span><span id="typingTxt"></span></div>
+    <div class="foot">
+      <div class="emojis" id="emojis"></div>
+      <button class="ibtn" id="emojiBtn" aria-label="Chọn emoji">😊</button>
+      <input type="text" id="msg" placeholder="Aa Nhập tin nhắn..." autocomplete="off">
+      <button class="ibtn" id="send" aria-label="Gửi"></button>
+    </div>
+  </section>
+</div>
 
-    <script>
-        const SUPABASE_URL = 'https://bgobcellahiepuarhjls.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_QIZIRzeLhQG0u8990fShwA_ays79eZz'; // Key của ông giáo
-        
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<script>
+const SUPABASE_URL = 'https://bgobcellahiepuarhjls.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_QIZIRzeLhQG0u8990fShwA_ays79eZz';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        const loginModal = document.getElementById('login-modal');
-        const messengerApp = document.getElementById('messengerApp');
-        const loginBtn = document.getElementById('loginBtn');
-        const usernameInput = document.getElementById('usernameInput');
-        const modalKeyInput = document.getElementById('modalKeyInput');
-        const userTag = document.getElementById('userTag');
+const $ = id => document.getElementById(id);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
 
-        const chatBody = document.querySelector('.chat-body');
-        const inputMsg = document.getElementById('messageInput');
-        const sendBtn = document.getElementById('sendButton');
+/* ---- Theme ---- */
+const root = document.documentElement;
+root.dataset.theme = store.get('sm-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const themeBtn = $('theme');
+const syncTheme = () => themeBtn.textContent = root.dataset.theme === 'dark' ? '☀️' : '🌙';
+syncTheme();
+themeBtn.onclick = () => {
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  store.set('sm-theme', root.dataset.theme);
+  syncTheme();
+};
 
-        let myName = "";
-        let secretKey = "";
+/* ---- State ---- */
+let myName = '', secretKey = '', channel = null, loading = true, lastTyping = 0;
+const seen = new Set(), pending = new Map(), typers = new Map(), queue = [];
+let last = { sender: null, row: null, date: null };
+const body = $('body'), input = $('msg'), sendBtn = $('send'), pill = $('pill');
 
-        // Sự kiện bấm nút Đăng nhập
-        loginBtn.addEventListener('click', () => {
-            const name = usernameInput.value.trim();
-            const key = modalKeyInput.value.trim();
+/* ---- Helpers ---- */
+const hue = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const fmtTime = d => d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+const label = d => d.toDateString() === new Date().toDateString() ? fmtTime(d) : d.toLocaleDateString('vi-VN') + ' ' + fmtTime(d);
+const decrypt = c => { try { return CryptoJS.AES.decrypt(c, secretKey).toString(CryptoJS.enc.Utf8) || null; } catch (e) { return null; } };
+const nearBottom = () => body.scrollHeight - body.scrollTop - body.clientHeight < 140;
+const toBottom = () => { body.scrollTo({ top: body.scrollHeight, behavior: loading ? 'auto' : 'smooth' }); pill.classList.remove('on'); };
+const SEND_SVG = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5v-6.8l11-1.7-11-1.7V3.5L22 12z"/></svg>';
+const updateIcon = () => { sendBtn.innerHTML = input.value.trim() ? SEND_SVG : '👍'; };
+updateIcon();
 
-            if (!name || !key) {
-                alert("Vui lòng nhập đầy đủ tên và Secret Key!");
-                return;
-            }
+/* ---- Render ---- */
+function addMessage(m, isPending) {
+  const sender = String(m.sender || '?');
+  const mine = sender === myName;
+  const d = new Date(m.created_at || Date.now());
+  const stick = mine || nearBottom() || loading;
 
-            myName = name;
-            secretKey = key;
+  const empty = body.querySelector('.empty');
+  if (empty) empty.remove();
 
-            userTag.innerText = "Tài khoản: " + myName;
+  if (!last.date || d - last.date > 15 * 60000 || d.toDateString() !== last.date.toDateString()) {
+    body.appendChild(el('div', 'divider', label(d)));
+    last.sender = null;
+  }
+  const cont = last.sender === sender;
+  if (cont) last.row.classList.add('has-next');
 
-            // Ẩn modal login, hiện app chat
-            loginModal.style.display = 'none';
-            messengerApp.style.display = 'flex';
+  const row = el('div', 'row ' + (mine ? 'sent' : 'recv') + (cont ? ' cont' : '') + (loading ? '' : ' in') + (isPending ? ' pending' : ''));
+  if (m.id) row.dataset.id = m.id;
+  if (!mine) {
+    const av = el('div', 'av' + (cont ? ' sp' : ''), sender[0].toUpperCase());
+    av.style.background = `hsl(${hue(sender)} 60% 50%)`;
+    row.appendChild(av);
+  }
+  const col = el('div', 'col');
+  if (!mine && !cont) col.appendChild(el('div', 'name', sender));
+  const text = decrypt(m.content);
+  const bub = el('div', 'msg' + (text == null ? ' locked' : ''), text == null ? '🔒 Không giải mã được — kiểm tra lại Secret Key' : text);
+  bub.title = fmtTime(d);
+  col.appendChild(bub);
+  row.appendChild(col);
+  body.appendChild(row);
+  last = { sender, row, date: d };
 
-            // Tải tin nhắn và lắng nghe realtime
-            fetchMessages();
-            subscribeRealtime();
-        });
+  if (!mine && typers.has(sender)) { clearTimeout(typers.get(sender)); typers.delete(sender); renderTyping(); }
+  if (stick) toBottom(); else pill.classList.add('on');
+  return row;
+}
 
-        // 1. Tải lịch sử tin nhắn
-        async function fetchMessages() {
-            let { data, error } = await supabaseClient
-                .from('messages')
-                .select('*')
-                .order('created_at', { ascending: true });
+function renderTyping() {
+  const names = [...typers.keys()];
+  $('typing').classList.toggle('on', names.length > 0);
+  if (names.length) $('typingTxt').textContent = (names.length > 2 ? 'Nhiều người' : names.join(', ')) + ' đang nhập';
+}
 
-            if (error) {
-                console.error('Lỗi tải tin nhắn:', error);
-                return;
-            }
+function renderPresence() {
+  $('online').textContent = Object.keys(channel.presenceState()).length + ' đang online';
+}
 
-            chatBody.innerHTML = '';
-            if (data && data.length > 0) {
-                data.forEach(msg => appendMessage(msg.sender, msg.content));
-            } else {
-                appendMessage("System", "Phòng chat trống. Hãy gửi tin nhắn đầu tiên!");
-            }
-        }
+/* ---- Realtime + history ---- */
+function adopt(row, m) {
+  if (row.dataset.id) return;
+  row.dataset.id = m.id; seen.add(m.id); pending.delete(m.content);
+  row.classList.remove('pending');
+}
 
-        // 2. Hiển thị tin nhắn (Giải mã E2EE)
-        function appendMessage(sender, encryptedContent) {
-            let decryptedContent = encryptedContent;
+function incoming(m) {
+  if (seen.has(m.id)) return;
+  const p = pending.get(m.content);
+  if (p) { adopt(p, m); return; }
+  seen.add(m.id);
+  addMessage(m);
+}
 
-            if (sender !== "System") {
-                try {
-                    let bytes = CryptoJS.AES.decrypt(encryptedContent, secretKey);
-                    let originalText = bytes.toString(CryptoJS.enc.Utf8);
-                    if (originalText) {
-                        decryptedContent = originalText;
-                    } else {
-                        decryptedContent = "🔒 [Sai Secret Key giải mã]";
-                    }
-                } catch (e) {
-                    decryptedContent = "🔒 [Lỗi giải mã]";
-                }
-            }
+async function loadHistory() {
+  const { data, error } = await db.from('messages').select('*').order('created_at', { ascending: false }).limit(200);
+  body.innerHTML = '';
+  if (error) body.appendChild(el('div', 'empty', 'Không tải được tin nhắn: ' + error.message));
+  else if (!data.length) body.appendChild(el('div', 'empty', 'Chưa có tin nhắn nào. Gửi lời chào đầu tiên 👋'));
+  else data.reverse().forEach(m => { seen.add(m.id); addMessage(m); });
+  toBottom();
+  loading = false;
+  queue.splice(0).forEach(incoming);
+}
 
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `msg ${sender === myName ? 'sent' : 'received'}`;
-            msgDiv.innerHTML = `<span class="sender">${sender}</span>${decryptedContent}`;
-            chatBody.appendChild(msgDiv);
-            chatBody.scrollTop = chatBody.scrollHeight;
-        }
+function connect() {
+  channel = db.channel('secret-room', { config: { presence: { key: myName }, broadcast: { self: false } } });
+  channel
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, p => { loading ? queue.push(p.new) : incoming(p.new); })
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      const n = payload && payload.name;
+      if (!n || n === myName) return;
+      clearTimeout(typers.get(n));
+      typers.set(n, setTimeout(() => { typers.delete(n); renderTyping(); }, 3500));
+      renderTyping();
+    })
+    .on('presence', { event: 'sync' }, renderPresence)
+    .subscribe(async status => {
+      const dot = $('dot');
+      if (status === 'SUBSCRIBED') {
+        dot.className = 'dot ok';
+        await channel.track({ name: myName });
+        if (loading) loadHistory();
+      } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+        dot.className = 'dot off';
+        $('online').textContent = 'Mất kết nối';
+      }
+    });
+}
 
-        // 3. Gửi tin nhắn lên Supabase
-        async function sendMessage() {
-            const text = inputMsg.value.trim();
-            if (!text) return;
+/* ---- Send ---- */
+async function send(text) {
+  text = text.trim();
+  if (!text) return;
+  const content = CryptoJS.AES.encrypt(text, secretKey).toString();
+  const row = addMessage({ sender: myName, content, created_at: new Date().toISOString() }, true);
+  pending.set(content, row);
+  const { data, error } = await db.from('messages').insert([{ sender: myName, content }]).select().single();
+  if (error) { pending.delete(content); fail(row, text); return; }
+  adopt(row, data);
+}
 
-            const encryptedContent = CryptoJS.AES.encrypt(text, secretKey).toString();
+function fail(row, text) {
+  row.classList.remove('pending');
+  const meta = el('div', 'meta', 'Gửi lỗi · bấm để thử lại');
+  meta.onclick = () => { row.remove(); send(text); };
+  row.querySelector('.col').appendChild(meta);
+}
 
-            const { error } = await supabaseClient
-                .from('messages')
-                .insert([{ sender: myName, content: encryptedContent }]);
+function submit() {
+  const t = input.value.trim();
+  input.value = ''; updateIcon();
+  send(t || '👍');
+}
 
-            if (error) {
-                alert('Lỗi gửi tin nhắn: ' + error.message);
-            } else {
-                inputMsg.value = '';
-            }
-        }
+sendBtn.onclick = submit;
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) submit(); });
+input.addEventListener('input', () => {
+  updateIcon();
+  const now = Date.now();
+  if (channel && now - lastTyping > 2000) {
+    lastTyping = now;
+    channel.send({ type: 'broadcast', event: 'typing', payload: { name: myName } });
+  }
+});
+body.addEventListener('scroll', () => { if (nearBottom()) pill.classList.remove('on'); });
+pill.onclick = toBottom;
 
-        sendBtn.addEventListener('click', sendMessage);
-        inputMsg.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+/* ---- Emoji ---- */
+const picker = $('emojis');
+'😀 😂 🥹 😍 😘 😎 🤔 😅 😭 😡 👍 👎 👏 🙏 💪 🔥 ✨ 🎉 ❤️ 💔 😴 🤝 👀 💯 🥳 😇 🙈 😱 🤣 🫶'.split(' ').forEach(e => {
+  const b = el('button', null, e);
+  b.type = 'button';
+  b.onclick = () => { input.value += e; input.focus(); updateIcon(); };
+  picker.appendChild(b);
+});
+$('emojiBtn').onclick = ev => { ev.stopPropagation(); picker.classList.toggle('on'); };
+document.addEventListener('click', ev => { if (!picker.contains(ev.target)) picker.classList.remove('on'); });
 
-        // 4. Lắng nghe Realtime
-        function subscribeRealtime() {
-            supabaseClient
-                .channel('public:messages')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-                    appendMessage(payload.new.sender, payload.new.content);
-                })
-                .subscribe();
-        }
-    </script>
+/* ---- Login ---- */
+$('name').value = store.get('sm-name') || '';
+
+function login() {
+  const name = $('name').value.trim(), key = $('key').value.trim();
+  if (!name || !key) {
+    const c = $('card');
+    $('err').textContent = 'Nhập tên hiển thị và Secret Key để vào phòng.';
+    c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
+    return;
+  }
+  myName = name; secretKey = key;
+  store.set('sm-name', name);
+  $('me').textContent = name;
+  $('login').classList.add('hide');
+  $('app').classList.add('on');
+  connect();
+  input.focus();
+}
+
+$('loginBtn').onclick = login;
+['name', 'key'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) login(); }));
+$('exit').onclick = () => location.reload();
+</script>
 </body>
 </html>
