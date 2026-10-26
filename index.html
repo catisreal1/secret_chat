@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Hacker Secret Chat E2EE</title>
+    
+    <!-- Nhúng thư viện Supabase JS & CryptoJS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #0a0a0a;
+            color: #00ff66;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .chat-card {
+            width: 100%;
+            max-width: 600px;
+            height: 85vh;
+            background: #111;
+            border: 1px solid #00ff66;
+            box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
+            display: flex;
+            flex-direction: column;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        /* Header & Secret Key Bar */
+        .chat-header {
+            padding: 12px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #222;
+            text-align: center;
+        }
+        .key-box {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+        }
+        .key-box input {
+            flex: 1;
+            padding: 6px;
+            background: #000;
+            border: 1px solid #00ff66;
+            color: #ff0055;
+            font-weight: bold;
+            font-family: inherit;
+        }
+
+        /* Area tin nhắn */
+        .chat-body {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .msg {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .msg.received {
+            background: #1c261f;
+            border-left: 3px solid #00ff66;
+            align-self: flex-start;
+        }
+        .msg.sent {
+            background: #2b1f31;
+            border-right: 3px solid #ff0055;
+            align-self: flex-end;
+            color: #ff88ff;
+        }
+        .msg .sender {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        /* Footer nhập tin nhắn */
+        .chat-footer {
+            padding: 12px;
+            background: #1a1a1a;
+            display: flex;
+            gap: 8px;
+            border-top: 1px solid #222;
+        }
+        .chat-footer input {
+            flex: 1;
+            padding: 10px;
+            background: #000;
+            border: 1px solid #333;
+            color: #00ff66;
+            font-family: inherit;
+        }
+        .chat-footer input:focus {
+            outline: none;
+            border-color: #00ff66;
+        }
+        .chat-footer button {
+            padding: 10px 18px;
+            background: #00ff66;
+            color: #000;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .chat-footer button:hover {
+            background: #00cc52;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-card">
+        <!-- Header & Pass Mã Hóa -->
+        <div class="chat-header">
+            <h3>🔒 SECRET CHAT [E2EE]</h3>
+            <div class="key-box">
+                <input type="password" placeholder="🔑 Nhập Secret Key để mã hóa/giải mã..." value="Secret123">
+            </div>
+        </div>
+
+        <!-- Khung chứa tin nhắn -->
+        <div class="chat-body">
+            <div class="msg received">
+                <span class="sender">System</span>
+                Đang kết nối tới Supabase Realtime...
+            </div>
+        </div>
+
+        <!-- Ô nhập & Gửi -->
+        <div class="chat-footer">
+            <input type="text" placeholder="Nhập tin nhắn bí mật vào đây...">
+            <button>GỬI</button>
+        </div>
+    </div>
+
+    <script>
+        // Cấu hình Supabase của ông giáo
+        const SUPABASE_URL = 'https://bgobcellahiepuarhjls.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_LD3NQU8Mr6ODrJthWQJ8lw_Hp2kDCmw'; // Thay chuỗi sb_publishable_... vào đây
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const chatBody = document.querySelector('.chat-body');
+        const inputMsg = document.querySelector('.chat-footer input');
+        const sendBtn = document.querySelector('.chat-footer button');
+        const keyInput = document.querySelector('.key-box input');
+
+        // Tạo tên định danh ngẫu nhiên cho mỗi tab trình duyệt
+        const myName = "User_" + Math.floor(Math.random() * 1000);
+
+        // 1. Tải lịch sử tin nhắn cũ từ Supabase
+        async function fetchMessages() {
+            let { data, error } = await supabaseClient
+                .from('messages')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                console.error('Lỗi tải tin nhắn:', error);
+                return;
+            }
+
+            chatBody.innerHTML = '';
+            if (data && data.length > 0) {
+                data.forEach(msg => appendMessage(msg.sender, msg.content));
+            } else {
+                appendMessage("System", "Chưa có tin nhắn nào. Hãy gửi tin nhắn đầu tiên!");
+            }
+        }
+
+        // 2. Hiển thị tin nhắn lên giao diện (Giải mã E2EE bằng CryptoJS)
+        function appendMessage(sender, encryptedContent) {
+            const secretKey = keyInput.value;
+            let decryptedContent = encryptedContent;
+
+            if (sender !== "System") {
+                try {
+                    let bytes = CryptoJS.AES.decrypt(encryptedContent, secretKey);
+                    let originalText = bytes.toString(CryptoJS.enc.Utf8);
+                    if (originalText) {
+                        decryptedContent = originalText;
+                    } else {
+                        decryptedContent = "🔒 [Tin nhắn mã hóa - Sai Secret Key]";
+                    }
+                } catch (e) {
+                    decryptedContent = "🔒 [Lỗi giải mã]";
+                }
+            }
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg ${sender === myName ? 'sent' : 'received'}`;
+            msgDiv.innerHTML = `<span class="sender">${sender}</span>${decryptedContent}`;
+            chatBody.appendChild(msgDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        // 3. Gửi tin nhắn lên Supabase (Đã mã hóa trước khi đẩy)
+        async function sendMessage() {
+            const text = inputMsg.value.trim();
+            const secretKey = keyInput.value;
+            if (!text || !secretKey) {
+                alert("Vui lòng nhập tin nhắn và Secret Key!");
+                return;
+            }
+
+            // Mã hóa tin nhắn
+            const encryptedContent = CryptoJS.AES.encrypt(text, secretKey).toString();
+
+            const { error } = await supabaseClient
+                .from('messages')
+                .insert([{ sender: myName, content: encryptedContent }]);
+
+            if (error) {
+                alert('Lỗi gửi tin nhắn: ' + error.message);
+            } else {
+                inputMsg.value = '';
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        inputMsg.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // 4. Lắng nghe Realtime (Tin nhắn mới tự động nổ trên mọi tab)
+        supabaseClient
+            .channel('public:messages')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+                appendMessage(payload.new.sender, payload.new.content);
+            })
+            .subscribe();
+
+        // Chạy tải tin nhắn lần đầu
+        fetchMessages();
+    </script>
+</body>
+</html>
